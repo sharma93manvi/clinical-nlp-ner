@@ -1,0 +1,10 @@
+torch
+transformers
+datasets
+seqeval
+scikit-learn
+numpy
+pandas
+matplotlib
+jupyter
+tqdm
