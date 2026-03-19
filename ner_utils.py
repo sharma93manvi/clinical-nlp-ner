@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
 
 
-def tokenize_and_align_labels(examples, tokenizer, label_all_tokens: bool = False):
+def tokenize_and_align_labels(
+    examples, tokenizer, label_all_tokens: bool = False, label2id: Optional[Dict[str, int]] = None
+):
     tokenized = tokenizer(
         examples["tokens"],
         truncation=True,
@@ -17,6 +19,10 @@ def tokenize_and_align_labels(examples, tokenizer, label_all_tokens: bool = Fals
 
     labels = []
     for i, label_ids in enumerate(examples["ner_tags"]):
+        if label_ids and isinstance(label_ids[0], str):
+            if label2id is None:
+                raise ValueError("label2id is required when ner_tags are strings.")
+            label_ids = [label2id[x] for x in label_ids]
         word_ids = tokenized.word_ids(batch_index=i)
         previous_word_idx = None
         aligned = []

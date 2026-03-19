@@ -82,28 +82,27 @@ Input:
 The patient with diabetes reports chest pain and was started on metformin after MRI procedure.
 ```
 
-Example extracted entities:
+Example extracted entities (from the quick sanity run in this workspace):
 
 ```json
-[
-  {"entity_type": "DISEASE", "text": "diabetes", "confidence": 0.94},
-  {"entity_type": "SYMPTOM", "text": "chest pain", "confidence": 0.89},
-  {"entity_type": "DRUG", "text": "metformin", "confidence": 0.96},
-  {"entity_type": "PROCEDURE", "text": "MRI procedure", "confidence": 0.91}
-]
+[]
 ```
 
-## Results (Fill After Training)
+## Results (quick sanity run)
 
-After running `evaluate.py`, copy values from `outputs/eval_metrics.json`.
+This run used:
+- `bigbio/bc5cdr` (fallback), because `bigbio/n2c2_2018_track2` was unavailable in the current environment.
+- `dmis-lab/biobert-base-cased-v1.2`
+- 1 epoch, `max_train_samples=300`, `max_eval_samples=120`
+- evaluation on `--split test`
+
+Metrics were written to `outputs/eval_metrics_quick.json`.
 
 | Entity Type | Precision | Recall | F1 |
 |---|---:|---:|---:|
-| DISEASE | - | - | - |
-| DRUG / MEDICATION | - | - | - |
-| SYMPTOM | - | - | - |
-| PROCEDURE | - | - | - |
-| Overall | - | - | - |
+| CHEMICAL | 0.8210 | 0.0799 | 0.1456 |
+| DISEASE | 0.0000 | 0.0000 | 0.0000 |
+| Overall | 0.8210 | 0.0427 | 0.0812 |
 
 ## Notebook
 

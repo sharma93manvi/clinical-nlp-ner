@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 from functools import partial
@@ -48,7 +49,7 @@ def main():
     model = load_token_classifier(args.model_name, label2id, id2label)
 
     tokenized = bundle.dataset.map(
-        partial(tokenize_and_align_labels, tokenizer=tokenizer),
+        partial(tokenize_and_align_labels, tokenizer=tokenizer, label2id=label2id),
         batched=True,
         desc="Tokenizing dataset",
     )
@@ -64,33 +65,51 @@ def main():
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
     metrics_fn = partial(compute_ner_metrics, label_list=bundle.label_list)
 
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        learning_rate=args.learning_rate,
-        per_device_train_batch_size=args.train_batch_size,
-        per_device_eval_batch_size=args.eval_batch_size,
-        num_train_epochs=args.epochs,
-        weight_decay=args.weight_decay,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        logging_strategy="steps",
-        logging_steps=50,
-        load_best_model_at_end=True,
-        metric_for_best_model="f1",
-        greater_is_better=True,
-        report_to="none",
-        seed=args.seed,
-    )
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    kwargs = {
+        "output_dir": args.output_dir,
+        "learning_rate": args.learning_rate,
+        "per_device_train_batch_size": args.train_batch_size,
+        "per_device_eval_batch_size": args.eval_batch_size,
+        "num_train_epochs": args.epochs,
+        "weight_decay": args.weight_decay,
+        "logging_steps": 50,
+        "seed": args.seed,
+    }
+    if "evaluation_strategy" in ta_params:
+        kwargs["evaluation_strategy"] = "epoch"
+    elif "eval_strategy" in ta_params:
+        kwargs["eval_strategy"] = "epoch"
+    if "save_strategy" in ta_params:
+        kwargs["save_strategy"] = "epoch"
+    if "logging_strategy" in ta_params:
+        kwargs["logging_strategy"] = "steps"
+    if "load_best_model_at_end" in ta_params:
+        kwargs["load_best_model_at_end"] = True
+    if "metric_for_best_model" in ta_params:
+        kwargs["metric_for_best_model"] = "f1"
+    if "greater_is_better" in ta_params:
+        kwargs["greater_is_better"] = True
+    if "report_to" in ta_params:
+        kwargs["report_to"] = "none"
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_ds,
-        eval_dataset=eval_ds,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=metrics_fn,
-    )
+    training_args = TrainingArguments(**kwargs)
+
+    trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": train_ds,
+        "eval_dataset": eval_ds,
+        "data_collator": data_collator,
+        "compute_metrics": metrics_fn,
+    }
+    trainer_params = inspect.signature(Trainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = Trainer(**trainer_kwargs)
 
     trainer.train()
     eval_metrics = trainer.evaluate()

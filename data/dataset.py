@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from datasets import DatasetDict, load_dataset
+import re
+
+from datasets import Dataset, DatasetDict, get_dataset_config_names, load_dataset
 
 
 @dataclass
@@ -26,8 +28,59 @@ def _infer_label_list(dataset: DatasetDict) -> List[str]:
             continue
         for row in dataset[split]:
             labels.update(row["ner_tags"])
-    labels = sorted(int(x) for x in labels)
-    return [str(x) for x in labels]
+    labels = {str(x) for x in labels}
+    ordered = ["O"] + sorted(x for x in labels if x != "O")
+    return ordered
+
+
+def _tokenize_with_offsets(text: str) -> Tuple[List[str], List[Tuple[int, int]]]:
+    tokens: List[str] = []
+    offsets: List[Tuple[int, int]] = []
+    for m in re.finditer(r"\S+", text):
+        tokens.append(m.group(0))
+        offsets.append((m.start(), m.end()))
+    return tokens, offsets
+
+
+def _convert_bigbio_source_to_token_tags(dataset: DatasetDict) -> DatasetDict:
+    converted = DatasetDict()
+
+    for split, split_ds in dataset.items():
+        out = {"tokens": [], "ner_tags": []}
+
+        for row in split_ds:
+            passages = row.get("passages", [])
+            for passage in passages:
+                text = passage.get("text", "")
+                if not text:
+                    continue
+                tokens, token_offsets = _tokenize_with_offsets(text)
+                if not tokens:
+                    continue
+
+                tags = ["O"] * len(tokens)
+                entities = passage.get("entities", [])
+                for ent in entities:
+                    ent_type = ent.get("type", "ENTITY").upper()
+                    for span in ent.get("offsets", []):
+                        if not span or len(span) < 2:
+                            continue
+                        char_start, char_end = span[0], span[1]
+                        hit_indices = [
+                            i
+                            for i, (tok_start, tok_end) in enumerate(token_offsets)
+                            if not (tok_end <= char_start or tok_start >= char_end)
+                        ]
+                        for j, idx in enumerate(hit_indices):
+                            prefix = "B" if j == 0 else "I"
+                            tags[idx] = f"{prefix}-{ent_type}"
+
+                out["tokens"].append(tokens)
+                out["ner_tags"].append(tags)
+
+        converted[split] = Dataset.from_dict(out)
+
+    return converted
 
 
 def load_ner_dataset(
@@ -42,12 +95,28 @@ def load_ner_dataset(
     dataset: Optional[DatasetDict] = None
 
     for candidate in [primary_dataset, fallback_dataset]:
+        attempts = [
+            {},
+            {"trust_remote_code": True},
+        ]
+
+        # Some BigBio datasets require an explicit config name.
         try:
-            dataset = load_dataset(candidate)
-            selected = candidate
+            configs = get_dataset_config_names(candidate, trust_remote_code=True)
+            if configs:
+                attempts.append({"name": configs[0], "trust_remote_code": True})
+        except Exception:
+            pass
+
+        for kwargs in attempts:
+            try:
+                dataset = load_dataset(candidate, **kwargs)
+                selected = candidate
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+        if dataset is not None:
             break
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
 
     if dataset is None:
         raise RuntimeError(
@@ -57,6 +126,11 @@ def load_ner_dataset(
     if not isinstance(dataset, DatasetDict):
         # convert if a single split comes back for a dataset config
         dataset = DatasetDict({"train": dataset})
+
+    # Normalize BigBio source schema to token-tag format.
+    if "train" in dataset and {"tokens", "ner_tags"} - set(dataset["train"].column_names):
+        if "passages" in dataset["train"].column_names:
+            dataset = _convert_bigbio_source_to_token_tags(dataset)
 
     # If no validation split exists, create one from train.
     if "validation" not in dataset and "train" in dataset:

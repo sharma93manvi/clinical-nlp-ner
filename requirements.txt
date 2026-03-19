@@ -1,6 +1,6 @@
 torch
 transformers
-datasets
+datasets<4
 seqeval
 scikit-learn
 numpy
@@ -8,3 +8,5 @@ pandas
 matplotlib
 jupyter
 tqdm
+accelerate>=1.1.0
+bioc

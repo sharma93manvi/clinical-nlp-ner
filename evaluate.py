@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import inspect
 from functools import partial
 
 from transformers import DataCollatorForTokenClassification, Trainer
@@ -36,18 +37,28 @@ def main():
     )
 
     tokenized = bundle.dataset.map(
-        partial(tokenize_and_align_labels, tokenizer=tokenizer),
+        partial(
+            tokenize_and_align_labels,
+            tokenizer=tokenizer,
+            label2id={label: i for i, label in enumerate(bundle.label_list)},
+        ),
         batched=True,
         desc="Tokenizing dataset",
     )
 
     metrics_fn = partial(compute_ner_metrics, label_list=bundle.label_list)
-    trainer = Trainer(
-        model=model,
-        tokenizer=tokenizer,
-        data_collator=DataCollatorForTokenClassification(tokenizer=tokenizer),
-        compute_metrics=metrics_fn,
-    )
+    trainer_kwargs = {
+        "model": model,
+        "data_collator": DataCollatorForTokenClassification(tokenizer=tokenizer),
+        "compute_metrics": metrics_fn,
+    }
+    trainer_params = inspect.signature(Trainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = Trainer(**trainer_kwargs)
 
     metrics = trainer.evaluate(tokenized[args.split], metric_key_prefix=args.split)
     expanded = {
