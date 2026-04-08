@@ -5,3 +5,5 @@ __pycache__/
 outputs/model/
 outputs/model_*/
 outputs/*.json
+.DS_Store
+tmp_trainer/

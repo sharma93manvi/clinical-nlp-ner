@@ -17,4 +17,5 @@ def load_token_classifier(
         num_labels=len(label2id),
         label2id=label2id,
         id2label=id2label,
+        ignore_mismatched_sizes=True,  # needed when reusing a pretrained model with a new label head
     )

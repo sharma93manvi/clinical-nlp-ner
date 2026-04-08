@@ -57,13 +57,14 @@ def compute_ner_metrics(eval_pred, label_list: List[str]) -> Dict[str, float]:
         true_predictions.append(pred_tags)
         true_labels.append(label_tags)
 
+    # zero_division=0 suppresses UndefinedMetricWarning when a class has no predictions
     metrics: Dict[str, float] = {
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions),
+        "precision": precision_score(true_labels, true_predictions, zero_division=0),
+        "recall": recall_score(true_labels, true_predictions, zero_division=0),
+        "f1": f1_score(true_labels, true_predictions, zero_division=0),
     }
 
-    report = classification_report(true_labels, true_predictions, output_dict=True)
+    report = classification_report(true_labels, true_predictions, output_dict=True, zero_division=0)
     for key, val in report.items():
         if isinstance(val, dict) and "f1-score" in val:
             safe = key.replace(" ", "_")

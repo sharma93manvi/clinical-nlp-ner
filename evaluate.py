@@ -29,18 +29,17 @@ def main():
     os.makedirs(os.path.dirname(args.output_metrics), exist_ok=True)
 
     bundle = load_ner_dataset(args.dataset_name, args.fallback_dataset)
+    label2id = {label: i for i, label in enumerate(bundle.label_list)}
+    id2label = {i: label for i, label in enumerate(bundle.label_list)}
+
     tokenizer = load_tokenizer(args.model_dir)
-    model = load_token_classifier(
-        args.model_dir,
-        {label: i for i, label in enumerate(bundle.label_list)},
-        {i: label for i, label in enumerate(bundle.label_list)},
-    )
+    model = load_token_classifier(args.model_dir, label2id, id2label)
 
     tokenized = bundle.dataset.map(
         partial(
             tokenize_and_align_labels,
             tokenizer=tokenizer,
-            label2id={label: i for i, label in enumerate(bundle.label_list)},
+            label2id=label2id,
         ),
         batched=True,
         desc="Tokenizing dataset",
